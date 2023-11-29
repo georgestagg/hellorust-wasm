@@ -1,0 +1,27 @@
+LIBDIR = myrustlib/target/wasm32-unknown-emscripten/release
+STATLIB = $(LIBDIR)/libmyrustlib.a
+PKG_CFLAGS =
+PKG_LIBS = -L$(LIBDIR) -lmyrustlib
+
+#all: clean
+
+$(SHLIB): $(STATLIB)
+
+# CRAN policy forbids using $HOME so we build in the current working dir and
+# never use local cache. Also CRAN does not allow using more than 2 CPUs.
+# This makes things really slow because we have to reinstall all dependencies.
+# You can comment these things out if you do not submit to CRAN.
+CRANFLAGS=-j 2
+CARGOTMP=$(PWD)/.cargo
+export CARGO_HOME=$(CARGOTMP)
+
+$(STATLIB):
+	if [ -f myrustlib/vendor.tar.xz ]; then tar xf myrustlib/vendor.tar.xz && mkdir -p $(CARGOTMP) && cp myrustlib/vendor-config.toml $(CARGOTMP)/config.toml; fi
+	CARGO_PROFILE_RELEASE_PANIC="abort" PATH="${PATH}:${HOME}/.cargo/bin" \
+	  cargo +nightly build ${CRANFLAGS} --manifest-path=myrustlib/Cargo.toml \
+	  --release --target wasm32-unknown-emscripten -Zbuild-std=panic_abort,std
+	rm -Rf $(CARGOTMP) vendor || true # CRAN wants us to remove "detritus"
+	rm -Rf $(LIBDIR)/build || true
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) myrustlib/target
